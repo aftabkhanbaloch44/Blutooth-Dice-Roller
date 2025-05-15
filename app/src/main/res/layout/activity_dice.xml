@@ -1,0 +1,75 @@
+<androidx.swiperefreshlayout.widget.SwipeRefreshLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/refreshLayout"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/txtViewConnectedDevice"
+            android:textSize="24sp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerHorizontal="true"
+            android:textColor="@color/white"/>
+
+        <TextView
+            android:id="@+id/txtDiceValue"
+            android:textSize="250sp"
+            android:layout_marginBottom="32dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/white"
+            android:text="-"
+            android:layout_centerInParent="true"/>
+
+        <TextView
+            android:id="@+id/txtDiceStatus"
+            android:text="Dice Value"
+            android:textSize="24sp"
+            android:layout_below="@id/txtDiceValue"
+            android:layout_marginBottom="32dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/white"
+            android:layout_centerInParent="true"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnRollDice"
+                android:text="Roll Dice"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                tools:ignore="HardcodedText"
+                android:backgroundTint="#FFC107"/>
+
+            <View
+                android:layout_width="10dp"
+                android:layout_height="10dp"/>
+
+            <Button
+                android:id="@+id/btnToggleMode"
+                android:text="Switch Mode"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                tools:ignore="HardcodedText"
+                android:foregroundTint="#FFC107"/>
+
+        </LinearLayout>
+
+    </RelativeLayout>
+
+
+</androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
