@@ -2,11 +2,15 @@ package com.wellbeing.diceroller;
 
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.ProgressDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -19,6 +23,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
@@ -37,10 +42,13 @@ public class DiceActivity extends AppCompatActivity {
     private static final UUID APP_UUID = UUID.fromString("a60f35f0-b93a-11de-8a39-08002009c666");
     private static final int PERMISSION_REQUEST_CODE = 999;
     private static final int REQUEST_ENABLE_BT = 777;
+    private static final String CHANNEL_ID = "dice_roll_channel";
+    private static final int NOTIFICATION_ID = 1;
 
     private SwipeRefreshLayout refreshLayout;
     private TextView txtDiceValue;
     private TextView txtDiceStatus;
+    private TextView txtViewConnectedDevice;
     private Button btnRollDice;
     private Button btnToggleMode;
 
@@ -55,6 +63,8 @@ public class DiceActivity extends AppCompatActivity {
 
     private ProgressDialog progressDialog;
 
+    private boolean isAppInForeground = true;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -62,9 +72,12 @@ public class DiceActivity extends AppCompatActivity {
 
         txtDiceValue = findViewById(R.id.txtDiceValue);
         txtDiceStatus = findViewById(R.id.txtDiceStatus);
+        txtViewConnectedDevice = findViewById(R.id.txtViewConnectedDevice);
         btnRollDice = findViewById(R.id.btnRollDice);
         btnToggleMode = findViewById(R.id.btnToggleMode);
         refreshLayout = findViewById(R.id.refreshLayout);
+
+        createNotificationChannel();
 
         checkAndRequestPermissions();
 
@@ -92,25 +105,80 @@ public class DiceActivity extends AppCompatActivity {
             }
         });
 
-        refreshLayout.setOnRefreshListener(this::proceedWithBluetoothConnection);
+        refreshLayout.setOnRefreshListener(() -> {
+            setConnectionStatus("Refreshing devices...");
+            proceedWithBluetoothConnection();
+        });
 
+        updateConnectionStatusNoDevice();
 
         startCommunication();
     }
 
+    private void setConnectionStatus(String status) {
+        runOnUiThread(() -> {
+            txtViewConnectedDevice.setText(status);
+        });
+    }
+
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        isAppInForeground = true;
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        isAppInForeground = false;
+    }
+
+
+    private void createNotificationChannel() {
+        CharSequence name = "Dice Roll Channel";
+        String description = "Notifications for dice roll received";
+        int importance = NotificationManager.IMPORTANCE_DEFAULT;
+        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, name, importance);
+        channel.setDescription(description);
+        NotificationManager notificationManager = getSystemService(NotificationManager.class);
+        if (notificationManager != null) {
+            notificationManager.createNotificationChannel(channel);
+        }
+    }
+
+    private void showDiceRollNotification(String rollValue) {
+
+        Intent intent = new Intent(this, DiceActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);   PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.drawable.dice, NotificationCompat.PRIORITY_MAX)
+                .setContentTitle("Dice Rolled: " + rollValue)
+                .setContentText("Your partner rolled the dice.")
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true);
+
+        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (notificationManager != null) {
+            notificationManager.notify(NOTIFICATION_ID, builder.build());
+        }
+    }
 
     private void proceedWithBluetoothConnection() {
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         if (bluetoothAdapter == null) {
             Toast.makeText(this, "Bluetooth not supported", Toast.LENGTH_LONG).show();
             refreshLayout.setRefreshing(false);
+            updateConnectionStatusNoDevice();
             return;
-        } else
-            Toast.makeText(this, "Bluetooth adapter supported", Toast.LENGTH_LONG).show();
+        }
 
         if (!bluetoothAdapter.isEnabled()) {
             Toast.makeText(this, "Bluetooth not enabled", Toast.LENGTH_LONG).show();
             refreshLayout.setRefreshing(false);
+            updateConnectionStatusNoDevice();
             return;
         } else {
             Toast.makeText(this, "Bluetooth enabled", Toast.LENGTH_LONG).show();
@@ -121,9 +189,10 @@ public class DiceActivity extends AppCompatActivity {
         if (pairedDevice == null) {
             Toast.makeText(this, "No paired device found", Toast.LENGTH_LONG).show();
             refreshLayout.setRefreshing(false);
-        } else
+            updateConnectionStatusNoDevice();
+        } else {
             Toast.makeText(this, "Paired device found: " + pairedDevice.getName(), Toast.LENGTH_LONG).show();
-
+        }
     }
 
     private void showPairedDevicesDialog() {
@@ -140,7 +209,11 @@ public class DiceActivity extends AppCompatActivity {
                     pairedDevice = bluetoothAdapter.getRemoteDevice(deviceAddress);
                     startCommunication();
                 })
-                .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
+                .setNegativeButton("Cancel", (dialog, which) -> {
+                    dialog.dismiss();
+                    refreshLayout.setRefreshing(false);
+                    updateConnectionStatusNoDevice();
+                })
                 .show();
         refreshLayout.setRefreshing(false);
     }
@@ -200,6 +273,7 @@ public class DiceActivity extends AppCompatActivity {
                 showPairedDevicesDialog();
             } else {
                 Toast.makeText(this, "Bluetooth not enabled", Toast.LENGTH_SHORT).show();
+                updateConnectionStatusNoDevice();
             }
         }
     }
@@ -215,8 +289,10 @@ public class DiceActivity extends AppCompatActivity {
     private void startCommunication() {
         if (pairedDevice == null) {
             refreshLayout.setRefreshing(false);
+            updateConnectionStatusNoDevice();
             return;
         }
+        setConnectionStatus("Connecting to device: " + pairedDevice.getName() + " ...");
         showProgressDialog(isSender ? "Connecting to receiver..." : "Waiting for connection...");
         if (isSender) {
             connectThread = new ConnectThread(pairedDevice);
@@ -247,8 +323,10 @@ public class DiceActivity extends AppCompatActivity {
             connectThread = null;
         }
         Log.d(TAG, "Connections closed");
+        updateConnectionStatusNoDevice();
     }
 
+    @SuppressLint("SetTextI18n")
     private void updateUI() {
         btnRollDice.setEnabled(isSender);
         btnToggleMode.setText("Switch to " + (isSender ? "Receiver" : "Sender"));
@@ -274,6 +352,15 @@ public class DiceActivity extends AppCompatActivity {
         });
     }
 
+    private void updateConnectionStatus(final String status) {
+        runOnUiThread(() -> txtViewConnectedDevice.setText(status));
+    }
+
+    @SuppressLint("SetTextI18n")
+    private void updateConnectionStatusNoDevice() {
+        runOnUiThread(() -> txtViewConnectedDevice.setText("No device connected. Pull to refresh."));
+    }
+
     private class AcceptThread extends Thread {
         private final BluetoothServerSocket serverSocket;
 
@@ -292,13 +379,21 @@ public class DiceActivity extends AppCompatActivity {
                 BluetoothSocket socket = serverSocket.accept();
                 if (socket != null) {
                     Log.d(TAG, "AcceptThread: connection accepted from " + socket.getRemoteDevice().getName());
+                    updateConnectionStatus("Connected to: " + socket.getRemoteDevice().getName());
                     connectedThread = new ConnectedThread(socket);
                     connectedThread.start();
                     serverSocket.close();
                     hideProgressDialog();
+                    runOnUiThread(() -> {
+                        if (refreshLayout.isRefreshing()) refreshLayout.setRefreshing(false);
+                    });
                 }
             } catch (IOException e) {
                 Log.e(TAG, "AcceptThread run: ", e);
+                updateConnectionStatusNoDevice();
+                runOnUiThread(() -> {
+                    if (refreshLayout.isRefreshing()) refreshLayout.setRefreshing(false);
+                });
             }
         }
 
@@ -328,14 +423,23 @@ public class DiceActivity extends AppCompatActivity {
             bluetoothAdapter.cancelDiscovery();
             try {
                 Log.d(TAG, "ConnectThread: Attempting connection to " + threadSocket.getRemoteDevice().getName());
+                updateConnectionStatus("Connecting to: " + threadSocket.getRemoteDevice().getName());
                 threadSocket.connect();
                 Log.d(TAG, "ConnectThread: Connection successful");
+                updateConnectionStatus("Connected to: " + threadSocket.getRemoteDevice().getName());
                 connectedThread = new ConnectedThread(threadSocket);
                 connectedThread.start();
                 connectedThread.write(("ROLE:" + (isSender ? "SENDER" : "RECEIVER")).getBytes());
                 hideProgressDialog();
+                runOnUiThread(() -> {
+                    if (refreshLayout.isRefreshing()) refreshLayout.setRefreshing(false);
+                });
             } catch (IOException e) {
                 Log.e(TAG, "ConnectThread run: Connection failed", e);
+                updateConnectionStatusNoDevice();
+                runOnUiThread(() -> {
+                    if (refreshLayout.isRefreshing()) refreshLayout.setRefreshing(false);
+                });
                 try {
                     threadSocket.close();
                 } catch (IOException closeException) {
@@ -385,6 +489,7 @@ public class DiceActivity extends AppCompatActivity {
                     handleMessage(message);
                 } catch (IOException e) {
                     Log.e(TAG, "Disconnected", e);
+                    updateConnectionStatusNoDevice();
                     break;
                 }
             }
@@ -394,9 +499,15 @@ public class DiceActivity extends AppCompatActivity {
         private void handleMessage(String message) {
             runOnUiThread(() -> {
                 if (message.startsWith("DICE:")) {
-                    txtDiceValue.setText(message.substring(5));
-                    txtDiceStatus.setText("Received: " + message.substring(5));
+                    String rollValue = message.substring(5);
+                    txtDiceValue.setText(rollValue);
+                    txtDiceStatus.setText("Received: " + rollValue);
+                    // Show notification if app in background
+                    if (!isAppInForeground) {
+                        showDiceRollNotification(rollValue);
+                    }
                 } else if (message.startsWith("ROLE:")) {
+                    // Note: The role messaging is reversed intentionally (the other end sends its role)
                     isSender = message.substring(5).equals("RECEIVER");
                     updateUI();
                 } else if (message.equals("MODE_SWITCH_REQUEST")) {
